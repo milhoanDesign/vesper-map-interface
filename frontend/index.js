@@ -82,6 +82,22 @@ function MapInterface() {
                 table: listTable,
                 shouldFieldBeAllowed: (field) => field.config.type === FieldType.MULTIPLE_RECORD_LINKS,
                 defaultValue: listTable.getFieldByNameIfExists('Requirements')
+            },
+            {
+                key: 'listingImageUrlField',
+                label: 'Listing Image URL Field',
+                type: 'field',
+                table: listTable,
+                shouldFieldBeAllowed: (field) => field.config.type === FieldType.URL || field.config.type === FieldType.SINGLE_LINE_TEXT,
+                defaultValue: listTable.getFieldByNameIfExists('Listing Image URL')
+            },
+            {
+                key: 'listingPropertyTypeField',
+                label: 'Property Type Field',
+                type: 'field',
+                table: listTable,
+                shouldFieldBeAllowed: (field) => field.config.type === FieldType.SINGLE_SELECT || field.config.type === FieldType.SINGLE_LINE_TEXT,
+                defaultValue: listTable.getFieldByNameIfExists('Property Type') || listTable.getFieldByNameIfExists('Listing Type') || listTable.getFieldByNameIfExists('Type')
             }
         ];
     }, []);
@@ -197,6 +213,9 @@ function MapInterface() {
                         }
                     }
 
+                    // Get the site code (record name) for the requirement
+                    const siteCode = record.name || '';
+
                     if (address) {
                         geocoder.geocode({ address: address }, (results, status) => {
                             if (status === 'OK' && results[0]) {
@@ -214,6 +233,69 @@ function MapInterface() {
                                         strokeColor: '#ffffff',
                                         strokeWeight: 1.6,
                                     },
+                                });
+
+                                // Create info window content for requirement
+                                const requirementContentString = `
+                                    <div style="
+                                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                        padding: 16px;
+                                        padding-top: 12px;
+                                        min-width: 220px;
+                                        max-width: 280px;
+                                        position: relative;
+                                    ">
+                                        <button onclick="document.querySelector('.gm-ui-hover-effect').click()" style="
+                                            position: absolute;
+                                            top: 0.5rem;
+                                            right: 0.5rem;
+                                            width: 2rem;
+                                            height: 2rem;
+                                            display: flex;
+                                            align-items: center;
+                                            justify-content: center;
+                                            background: white;
+                                            border: none;
+                                            border-radius: 3px;
+                                            cursor: pointer;
+                                            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                                            font-size: 18px;
+                                            color: #5f6368;
+                                            font-weight: 400;
+                                            transition: background 0.2s;
+                                        " onmouseover="this.style.background='#f1f3f4'" onmouseout="this.style.background='white'">
+                                            ×
+                                        </button>
+
+                                        <div style="
+                                            display: inline-block;
+                                            background-color: #e8eaed;
+                                            color: #3c4043;
+                                            padding: 4px 10px;
+                                            border-radius: 12px;
+                                            font-size: 0.875rem;
+                                            font-weight: 500;
+                                            margin-top: 8px;
+                                            margin-bottom: 8px;
+                                        ">
+                                            ${siteCode}
+                                        </div>
+
+                                        <div style="
+                                            font-size: 1rem;
+                                            color: #202124;
+                                            padding-right: 24px;
+                                            line-height: 1.4;
+                                        ">
+                                            ${address}
+                                        </div>
+                                    </div>
+                                `;
+
+                                // Add click listener to requirement marker
+                                marker.addListener('click', () => {
+                                    infoWindowRef.current.setContent(requirementContentString);
+                                    infoWindowRef.current.open(mapInstanceRef.current, marker);
                                 });
 
                                 markersRef.current.push(marker);
@@ -260,11 +342,15 @@ function MapInterface() {
                     const distanceField = customPropertyValueByKey.listingDistanceField;
                     const driveTimeField = customPropertyValueByKey.listingDriveTimeField;
                     const requirementsField = customPropertyValueByKey.listingRequirementsField;
+                    const imageUrlField = customPropertyValueByKey.listingImageUrlField;
+                    const propertyTypeField = customPropertyValueByKey.listingPropertyTypeField;
 
                     const address = addressField ? record.getCellValueAsString(addressField.id) : null;
                     const url = urlField ? record.getCellValueAsString(urlField.id) : null;
                     const distance = distanceField ? record.getCellValue(distanceField.id) : null;
                     const driveTime = driveTimeField ? record.getCellValue(driveTimeField.id) : null;
+                    const imageUrl = imageUrlField ? record.getCellValueAsString(imageUrlField.id) : null;
+                    const propertyType = propertyTypeField ? record.getCellValueAsString(propertyTypeField.id) : null;
 
                     // Get Requirements field value (it's a linked record field)
                     let requirementName = '';
@@ -293,12 +379,16 @@ function MapInterface() {
                                     },
                                 });
 
+                                // Feature flags for easy toggling
+                                const SHOW_IFRAME = false; // Set to false to disable iframe preview
+                                const IFRAME_HEIGHT = '250px'; // Adjust iframe height here
+
                                 // Create info window content matching the design
                                 const contentString = `
                                     <div style="
                                         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                                        padding: 16px;
-                                        padding-top: 12px;
+                                        padding: ${imageUrl ? '0.5rem 0 0 0' : '16px'};
+                                        padding-top: ${imageUrl ? '0.5rem' : '12px'};
                                         min-width: 280px;
                                         max-width: 320px;
                                         position: relative;
@@ -321,25 +411,53 @@ function MapInterface() {
                                             color: #5f6368;
                                             font-weight: 400;
                                             transition: background 0.2s;
+                                            z-index: 10;
                                         " onmouseover="this.style.background='#f1f3f4'" onmouseout="this.style.background='white'">
                                             ×
                                         </button>
 
-                                        ${requirementName ? `
-                                            <div style="
-                                                background-color: #e8eaed;
-                                                color: #000;
-                                                padding: 4px 12px;
-                                                border-radius: 4px;
-                                                font-size: 12px;
-                                                font-weight: 600;
-                                                display: inline-block;
+                                        ${imageUrl ? `
+                                            <img src="${imageUrl}" alt="Listing" style="
+                                                width: 100%;
+                                                height: 180px;
+                                                object-fit: cover;
+                                                border-radius: 8px 8px 0 0;
                                                 margin-bottom: 12px;
-                                                margin-top: 8px;
-                                            ">
-                                                ${requirementName}
-                                            </div>
+                                                margin-top: 0;
+                                                display: block;
+                                            " onerror="this.style.display='none'">
                                         ` : ''}
+
+                                        <div style="padding: ${imageUrl ? '0 16px 16px 16px' : '0'};">
+                                            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; margin-top: 8px;">
+                                                ${requirementName ? `
+                                                    <div style="
+                                                        background-color: #e8eaed;
+                                                        color: #000;
+                                                        padding: 4px 12px;
+                                                        border-radius: 4px;
+                                                        font-size: 12px;
+                                                        font-weight: 600;
+                                                        display: inline-block;
+                                                    ">
+                                                        ${requirementName}
+                                                    </div>
+                                                ` : ''}
+                                                ${propertyType ? `
+                                                    <div style="
+                                                        background-color: ${propertyType.toLowerCase().includes('parking') ? '#fff3cd' : propertyType.toLowerCase().includes('land') ? '#d1ecf1' : '#d4edda'};
+                                                        color: ${propertyType.toLowerCase().includes('parking') ? '#856404' : propertyType.toLowerCase().includes('land') ? '#0c5460' : '#155724'};
+                                                        padding: 4px 12px;
+                                                        border-radius: 4px;
+                                                        font-size: 12px;
+                                                        font-weight: 600;
+                                                        display: inline-block;
+                                                        border: 1px solid ${propertyType.toLowerCase().includes('parking') ? '#ffeaa7' : propertyType.toLowerCase().includes('land') ? '#bee5eb' : '#c3e6cb'};
+                                                    ">
+                                                        ${propertyType}
+                                                    </div>
+                                                ` : ''}
+                                            </div>
 
                                         <div style="
                                             font-size: 16px;
@@ -372,24 +490,47 @@ function MapInterface() {
                                             </div>
                                         ` : ''}
 
-                                        ${url ? `
-                                            <a href="${url}"
-                                               target="_blank"
-                                               rel="noopener noreferrer"
-                                               style="
-                                                   display: block;
-                                                   background-color: #adc9ed;
-                                                   color: #000;
-                                                   text-align: center;
-                                                   padding: 12px 16px;
-                                                   border-radius: 8px;
-                                                   text-decoration: none;
-                                                   font-weight: 600;
-                                                   font-size: 14px;
-                                               ">
-                                                Visit listing
-                                            </a>
-                                        ` : ''}
+                                            ${url ? `
+                                                <a href="${url}"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   style="
+                                                       display: block;
+                                                       background-color: #adc9ed;
+                                                       color: #000;
+                                                       text-align: center;
+                                                       padding: 12px 16px;
+                                                       border-radius: 8px;
+                                                       text-decoration: none;
+                                                       font-weight: 600;
+                                                       font-size: 14px;
+                                                       margin-bottom: ${SHOW_IFRAME ? '16px' : '0'};
+                                                   ">
+                                                    Visit listing
+                                                </a>
+                                            ` : ''}
+
+                                            ${url && SHOW_IFRAME ? `
+                                                <div style="
+                                                    margin-top: 8px;
+                                                    border-radius: 8px;
+                                                    overflow: hidden;
+                                                    border: 1px solid #e0e0e0;
+                                                ">
+                                                    <iframe
+                                                        src="${url}"
+                                                        style="
+                                                            width: 100%;
+                                                            height: ${IFRAME_HEIGHT};
+                                                            border: none;
+                                                            display: block;
+                                                        "
+                                                        sandbox="allow-scripts allow-same-origin"
+                                                        title="Listing Preview"
+                                                    ></iframe>
+                                                </div>
+                                            ` : ''}
+                                        </div>
                                     </div>
                                 `;
 
